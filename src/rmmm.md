@@ -68,7 +68,7 @@ global.parse_json_file = fun (filename) {
 if global.rmml.dev {
   self.manifest_url = "https://raw.githubusercontent.com/Harlem512/rm-mod-database/refs/heads/qa/dev_manifest.json"
 } else {
-  self.manifest_url = "https://raw.githubusercontent.com/Harlem512/rm-mod-database/refs/heads/main/manifest.json"
+  self.manifest_url = "https://raw.githubusercontent.com/Tereneckla/rm-mod-database/refs/heads/dependency/manifest.json"
 }
 
 self.manifest_file = "mods/rmmm/manifest.json"
@@ -96,7 +96,7 @@ self.force_restart = false
 self.disabling_rmmm = false
 
 -- true if a mod is being downloaded
-self.downloading_mod = false
+self.downloading_mod = 0
 -- builds transformed foreign manifest
 self.transform_foreign_manifest = fun () {
   let names = struct_get_names(self.foreign_manifest)
@@ -118,6 +118,82 @@ self.transform_foreign_manifest = fun () {
 -- temporary downloads
 self.directory = fun (file) {
   return temp_directory_get() + "rmmm/" + file
+}
+
+self.download_mod = fun (name) {
+  if (name == "bugfix.md") {
+    name = "bugfix"
+  }
+  let mod_meta = self.foreign_manifest[name]
+  if (!mod_meta) {
+    global.rmml.throw(name + "Not found in manifest\n" + string(self.foreign_manifest))
+    return --error
+  }
+  global.rmml.log("Downloading " + name)
+  self.downloading_mod += 1
+  mod_meta._downloading = true
+  let f = self.directory(mod_meta.name)
+  file_delete(f)
+  http_get_file(mod_meta.url, f)
+
+  let i = 0
+  while (i < array_length(mod_meta.dependencies)) {
+    self.download_mod(mod_meta.dependencies[i])
+    i += 1
+  }
+}
+
+self.reorder_local_mod = fun (index, up) {
+  if up {
+    index -= 1
+  }
+
+  let higher = self.sorted_local_mods[index]
+  let lower = self.sorted_local_mods[index + 1]
+
+  if !array_contains(lower.manifest.dependencies, higher.manifest.name) {
+    self.sorted_local_mods[index + 1] = higher
+    self.sorted_local_mods[index] = lower
+  }
+  else {
+    global.rmml.log("Can't switch " + lower.manifest.name + " with " + higher.manifest.name)
+  }
+}
+
+self.get_mods_dependent_on = fun (name) {
+  let i = 0
+  let dependents = []
+  while (i < array_length(self.sorted_local_mods)) {
+    let mod = self.sorted_local_mods[i]
+    if !mod.disabled {
+      if array_contains(mod.manifest.dependencies, name) {
+        array_push(dependents, mod.manifest.name)
+      }
+    }
+    i += 1
+  }
+  return dependents
+}
+
+self.get_missing_dependencies = fun() {
+  let i = 0
+  let enabled_mods = {}
+  let missing_dependencies = []
+  while i < array_length(self.sorted_local_mods) {
+    let mod = self.sorted_local_mods[i]
+    if !mod.disabled {
+      enabled_mods[mod.manifest.name] = true
+      let j = 0
+      while j < array_length(mod.manifest.dependencies) {
+        if !struct_exists(enabled_mods, mod.manifest.dependencies[j]) {
+          array_push(missing_dependencies, mod.manifest.dependencies[j])
+        }
+        j += 1
+      }
+    }
+    i += 1
+  }
+  return missing_dependencies
 }
 
 -- -----------------------------------------------------------------------------
@@ -144,6 +220,7 @@ self.cache_local = fun () {
       author: "Harlem512",
       version: global.rmml.version,
       type: "meow",
+      dependencies: [],
     }
   }
   if !raw_manifest["rmmm.md"] {
@@ -154,6 +231,7 @@ self.cache_local = fun () {
       author: "Harlem512",
       version: global.rmmm_version,
       type: "md",
+      dependencies: [],
     }
   }
 
@@ -175,6 +253,7 @@ self.cache_local = fun () {
         description: "[ Locally installed mod ]",
         version: 0,
         author: "Unknown",
+        dependencies: [],
       }
     }
     mod = file_find_next()
@@ -183,7 +262,7 @@ self.cache_local = fun () {
 
   -- list of local mods and their data
   self.sorted_local_mods = []
-
+  global.rmml.log("cache_local")
   -- add mods that are on the modlist
   let found_mods = {}
   let f = file_text_open_read("mods/modlist.txt")
@@ -247,6 +326,7 @@ self.save_mods = fun () {
 
 
 self.save_manifest = fun () {
+  global.rmml.log("Saving manifest")
   let manifest = file_text_open_write(self.manifest_file)
   file_text_write_string(manifest, json_stringify(self.local_manifest))
   file_text_close(manifest)
@@ -364,7 +444,12 @@ if self.state == 0 {
     if self.disabling_rmmm {
       "[shake]Disabling RMMM will prevent\nyou from modifying your\nmod list in-game[/shake]"
     } else {
-      "  Changing your mod list\n    requires restarting\n        Rusted Moss"
+      let missing_dependencies = self.get_missing_dependencies()
+      if array_length(missing_dependencies) > 0 {
+        "[shake]Missing dependencies:\n" + string_join_ext("\n",missing_dependencies) + "[/shake]"
+      } else {
+        "  Changing your mod list\n    requires restarting\n        Rusted Moss"
+      }
     }
   )
       .blend(0, 1)
@@ -388,13 +473,17 @@ if self.state == 0 {
   }
 } else if self.state == -2 {
   let del_name = self.delete_manifest.name
+  let dependents = self.get_mods_dependent_on(del_name)
 
   -- confirm delete
   draw_sprite_stretched(sui_9slice, 0, 54, 64, 336, 88)
   scribble(
     if del_name == "rmmm.md" {
       "[shake]Deleting RMMM will prevent\nyou from modifying your\nmod list in-game[/shake]"
-    } else {
+    } else if array_length(dependents) > 0 {
+      "[shake]" + del_name + " is needed for\n" + string_join_ext(",",dependents) + "\nDeleting will cause issues[/shake]"
+    }
+    else {
       "   Confirm delete mod:\n" + del_name
     }
   )
@@ -638,8 +727,7 @@ if self.state == 0 {
           "Load Earlier"
         ) {
           if index != 0 and len > 1 {
-            self.sorted_local_mods[index] = self.sorted_local_mods[index - 1]
-            self.sorted_local_mods[index - 1] = mod_meta
+            self.reorder_local_mod(index, true)
           }
         }
         draw_sprite_ext(sui_arrow_white_alt,0, 44,y+11, 1,1, 180, c_black,1)
@@ -651,8 +739,7 @@ if self.state == 0 {
           "Load Later"
         ) {
           if index < len - 1 and len > 1 {
-            self.sorted_local_mods[index] = self.sorted_local_mods[index + 1]
-            self.sorted_local_mods[index + 1] = mod_meta
+            self.reorder_local_mod(index, false)
           }
         }
         draw_sprite_ext(sui_arrow_white_alt,0, 64,y+11, 1,1, 0, c_black,1)
@@ -695,7 +782,7 @@ if self.state == 0 {
             }
             -- unmark deleted
             mod_meta._downloading = false
-            self.downloading_mod = false
+            self.downloading_mod -= 1
             -- update local manifest
             self.local_manifest[mod_meta.name] = {
               name: mod_meta.name,
@@ -704,11 +791,14 @@ if self.state == 0 {
               author: mod_meta.author,
               version: mod_meta.version,
               type: mod_meta.type,
+              dependencies: mod_meta.dependencies,
             }
             mod_meta._local = mod_meta.version
             self.force_restart = true
             -- update local file
-            self.save_manifest()
+            if (self.downloading_mod == 0) {
+              self.save_manifest()
+            }
           }
 
           -- draw loading kid
@@ -725,12 +815,8 @@ if self.state == 0 {
             } else {
               " Re-install"
             }
-          ) and !self.downloading_mod {
-            self.downloading_mod = true
-            mod_meta._downloading = true
-            let f = self.directory(mod_meta.name)
-            file_delete(f)
-            http_get_file(mod_meta.url, f)
+          ) and self.downloading_mod == 0 {
+            self.download_mod(mod_meta.name)
           }
         }
 
@@ -761,7 +847,7 @@ if self.state == 0 {
       draw_set_color(#58514A)
       draw_line(192, 57, 438, 57)
       draw_set_color(c_black)
-      scribble(hovered.description)
+      scribble(hovered.description + "\nDependencies: " + string_join_ext(",",hovered.dependencies))
         .blend(0, 1)
         .fit_to_box(240, 186)
         .draw(196, 60)
