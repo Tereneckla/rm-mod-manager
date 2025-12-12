@@ -481,9 +481,13 @@ global.rmml.__load_languages_path = fun(path, mod_name) {
   while (index < array_length(global.language_names_)) {
       let fileName = "mods/rmml/" + path + global.language_names_[index] + ".csv"
       if (!file_exists(fileName)) {
-        if (index == 0) { global.rmml.warn("No English translation file found", mod_name, path) }
-        else { global.rmml.__rmml_mod_languages[mod_name][index] = global.rmml.__rmml_mod_languages[mod_name][0] }
-        return
+        if (index == 0) { 
+          global.rmml.warn("No English translation file found", mod_name, path)
+          return
+        }
+        else { 
+          global.rmml.__rmml_mod_languages[mod_name][index] = global.rmml.__rmml_mod_languages[mod_name][0]
+        }
       }
       languageStrings = {}
       let grid = load_csv(fileName)
@@ -506,7 +510,13 @@ global.rmml.__load_languages_path = fun(path, mod_name) {
 }
 
 global.rmml.getString = fun(str) {
-  return global.rmml.__rmml_mod_languages[global.rmml_current_mod][global.current_language_][str]
+  if (variable_struct_exists(global.rmml.__rmml_mod_languages, global.rmml_current_mod)) {
+    if (array_length(global.rmml.__rmml_mod_languages[global.rmml_current_mod]) > global.current_language_) {
+      return global.rmml.__rmml_mod_languages[global.rmml_current_mod][global.current_language_][str]
+    }
+  }
+  global.rmml.warn(["Translation not found", global.rmml_current_mod, global.language_names_[global.current_language_], str])
+  return global.rmml_current_mod + ": " + str
 }
 
 -- MARK: Compile modlist
