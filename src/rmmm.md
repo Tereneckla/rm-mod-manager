@@ -167,8 +167,15 @@ self.cache_local = fun () {
     -- raw manifest exists, use that
     if raw_manifest[mod] {
       self.local_manifest[mod] = raw_manifest[mod]
-    } else {
-      -- no raw manifest, time to bake
+    -- maybe the mod has a manifest
+    } else if file_exists("mods/rmml/" + mod + "/manifest.json") {
+      let mod_manifest = global.parse_json_file("mods/rmml/" + mod + "/manifest.json")
+      if mod_manifest {
+        self.local_manifest[mod] = mod_manifest
+      }
+    } 
+    if !self.local_manifest[mod] {
+      -- no manifest, time to bake
       self.local_manifest[mod] = {
         name: mod,
         display: mod,
