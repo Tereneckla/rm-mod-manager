@@ -121,15 +121,16 @@ self.directory = fun (file) {
 }
 
 self.download_mod = fun (name) {
-  if (name == "bugfix.md") {
-    name = "bugfix"
-  }
   let mod_meta = self.foreign_manifest[name]
   if (!mod_meta) {
-    global.rmml.throw(name + "Not found in manifest\n" + string(self.foreign_manifest))
+    global.rmml.warn("Tried to download nonexistent mod " + name)
     return --error
   }
-  global.rmml.log("Downloading " + name)
+  -- already downloading or downloaded
+  if (variable_struct_exists(mod_meta, "_downloading")) {
+    return
+  }
+
   self.downloading_mod += 1
   mod_meta._downloading = true
   let f = self.directory(mod_meta.name)
@@ -138,7 +139,11 @@ self.download_mod = fun (name) {
 
   let i = 0
   while (i < array_length(mod_meta.dependencies)) {
-    self.download_mod(mod_meta.dependencies[i])
+    -- don't download again
+    let dependency = mod_meta.dependencies[i]
+    if !(variable_struct_exists(self.local_manifest, dependency)) {
+      self.download_mod(dependency)
+    }
     i += 1
   }
 }
@@ -194,6 +199,63 @@ self.get_missing_dependencies = fun() {
     i += 1
   }
   return missing_dependencies
+}
+
+self.sort_mods = fun(modlist) {
+  let n = array_length(modlist)
+  -- length 1 is sorted
+  if n <= 1 {
+    return modlist
+  }
+  let name_to_num = {}
+  let indegree = array_create(n, 0)
+  let queue = []
+  let res = []
+
+  let i = 0
+  while i < n {
+    name_to_num[modlist[i].manifest.name] = i
+    i += 1
+  }
+
+  i = 0
+  while i < n {
+    let j = 0
+    while j < array_length(modlist[i].manifest.dependencies) {
+        indegree[name_to_num[modlist[i].manifest.dependencies[j]]] +=1
+        j += 1
+    }
+    i += 1
+  }
+
+  i = 0
+  while i < n {
+    if (indegree[name_to_num[modlist[i].manifest.name]] == 0) {
+      array_push(queue,modlist[i])
+    }
+    i += 1
+  }
+
+  while array_length(queue) > 0 {
+    let top = queue[0]
+    array_delete(queue, 0, 1)
+    array_insert(res, 0, top)
+    i = 0
+    while i < array_length(top.manifest.dependencies) {
+      let next = name_to_num[top.manifest.dependencies[i]]
+      indegree[next] -= 1
+      if indegree[next] == 0 {
+        array_push(queue, modlist[next])
+      }
+      i += 1
+    }
+  }
+
+  if array_length(res) != n {
+    global.rmml.warn("Circular dependency detected")
+    return modlist
+  }
+  return res
 }
 
 -- -----------------------------------------------------------------------------
@@ -262,7 +324,6 @@ self.cache_local = fun () {
 
   -- list of local mods and their data
   self.sorted_local_mods = []
-  global.rmml.log("cache_local")
   -- add mods that are on the modlist
   let found_mods = {}
   let f = file_text_open_read("mods/modlist.txt")
@@ -294,16 +355,23 @@ self.cache_local = fun () {
   file_text_close(f)
 
   -- add mods that are in the folder, but not known to rmmm's modlist
+  let new_mods = []
   let i = 0
   while i < array_length(local_mods) {
     let mod = local_mods[i]
     if !found_mods[mod] and mod != "rmml.meow" {
-      array_push(self.sorted_local_mods, {
+      array_push(new_mods, {
         path: mod,
         disabled: true,
         manifest: self.local_manifest[mod],
       })
     }
+    i += 1
+  }
+  i = 0
+  new_mods = self.sort_mods(new_mods)
+  while i < array_length(new_mods) {
+    array_push(self.sorted_local_mods, new_mods[i])
     i += 1
   }
 }
