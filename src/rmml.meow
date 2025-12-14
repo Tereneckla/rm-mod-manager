@@ -651,9 +651,9 @@ global.rmml.__boot = fun() {
   ds_map_set(global.mod_map, "basic_events_create", quick_create)
 
   -- load the mod list
-  let mods = global.rmml.__compile_mod_list("mods/modlist.txt") 
+  let mods = global.rmml.__compile_mod_list("mods/modlist.txt")
 
-  -- load each mod on the list
+  -- load local manifest to check dependencies
   let manifest = {}
   if file_exists("mods/rmmm/manifest.json") {
     manifest = global.parse_json_file("mods/rmmm/manifest.json")
@@ -661,6 +661,8 @@ global.rmml.__boot = fun() {
       manifest = {}
     }
   }
+
+  -- load each mod on the list
   let i = 0
   while i < array_length(mods) {
     let mod_meta = manifest[mods[i]]
