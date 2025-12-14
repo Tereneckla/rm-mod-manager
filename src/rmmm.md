@@ -45,16 +45,6 @@ global.component = {
     return click
   },
 }
-
--- parse json
-global.parse_json_file = fun (filename) {
-  return global.rmml.try_catch(fun (filename) {
-    b = buffer_load(filename)
-    s = buffer_read(b, buffer_string)
-    buffer_delete(b)
-    return json_parse(s)
-  }, undefined, filename)
-}
 ```
 
 # controller
@@ -201,28 +191,52 @@ self.get_missing_dependencies = fun() {
   return missing_dependencies
 }
 
-self.sort_mods = fun(modlist) {
-  let n = array_length(modlist)
+self.sort_mods = fun(modlist, enabled) {
   -- length 1 is sorted
+  if array_length(modlist) <= 1 {
+    return modlist
+  }
+
+  -- remove disabled mods from sorting
+  let enabled_mods = []
+  let disabled_mods = []
+  if enabled {
+    let i = 0
+    while i < array_length(modlist) {
+      if modlist[i].disabled {
+        array_push(disabled_mods, modlist[i])
+      } else {
+        array_push(enabled_mods, modlist[i])
+      }
+      i += 1
+    }
+  }
+  else {
+    enabled_mods = modlist
+  }
+
+  let n = array_length(enabled_mods)
+  -- only 1 enabled mod, dependencies sorted
   if n <= 1 {
     return modlist
   }
+
   let name_to_num = {}
   let indegree = array_create(n, 0)
   let queue = []
   let res = []
 
-  let i = 0
+  i = 0
   while i < n {
-    name_to_num[modlist[i].manifest.name] = i
+    name_to_num[enabled_mods[i].manifest.name] = i
     i += 1
   }
 
   i = 0
   while i < n {
     let j = 0
-    while j < array_length(modlist[i].manifest.dependencies) {
-        indegree[name_to_num[modlist[i].manifest.dependencies[j]]] +=1
+    while j < array_length(enabled_mods[i].manifest.dependencies) {
+        indegree[name_to_num[enabled_mods[i].manifest.dependencies[j]]] +=1
         j += 1
     }
     i += 1
@@ -230,8 +244,8 @@ self.sort_mods = fun(modlist) {
 
   i = 0
   while i < n {
-    if (indegree[name_to_num[modlist[i].manifest.name]] == 0) {
-      array_push(queue,modlist[i])
+    if (indegree[name_to_num[enabled_mods[i].manifest.name]] == 0) {
+      array_push(queue,enabled_mods[i])
     }
     i += 1
   }
@@ -245,13 +259,20 @@ self.sort_mods = fun(modlist) {
       let next = name_to_num[top.manifest.dependencies[i]]
       indegree[next] -= 1
       if indegree[next] == 0 {
-        array_push(queue, modlist[next])
+        array_push(queue, enabled_mods[next])
       }
       i += 1
     }
   }
 
-  if array_length(res) != n {
+  -- add disabled mods to the back
+  let i = 0
+  while i < array_length(disabled_mods) {
+    array_push(enabled_mods, disabled_mods[i])
+    i += 1
+  }
+
+  if array_length(res) != array_length(modlist) {
     global.rmml.warn("Circular dependency detected")
     return modlist
   }
@@ -369,7 +390,7 @@ self.cache_local = fun () {
     i += 1
   }
   i = 0
-  new_mods = self.sort_mods(new_mods)
+  new_mods = self.sort_mods(new_mods, false)
   while i < array_length(new_mods) {
     array_push(self.sorted_local_mods, new_mods[i])
     i += 1

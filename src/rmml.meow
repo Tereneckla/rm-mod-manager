@@ -584,6 +584,16 @@ global.rmml.__add_controllers = fun () {
   }
 }
 
+-- parse json
+global.parse_json_file = fun (filename) {
+  return global.rmml.try_catch(fun (filename) {
+    b = buffer_load(filename)
+    s = buffer_read(b, buffer_string)
+    buffer_delete(b)
+    return json_parse(s)
+  }, undefined, filename)
+}
+
 -- MARK: Boot loader
 global.rmml.__boot = fun() {
   -- loading music
@@ -641,11 +651,34 @@ global.rmml.__boot = fun() {
   ds_map_set(global.mod_map, "basic_events_create", quick_create)
 
   -- load the mod list
-  let mods = global.rmml.__compile_mod_list("mods/modlist.txt")
+  let mods = global.rmml.__compile_mod_list("mods/modlist.txt") 
 
   -- load each mod on the list
+  let manifest = {}
+  if file_exists("mods/rmmm/manifest.json") {
+    manifest = global.parse_json_file("mods/rmmm/manifest.json")
+    if !manifest {
+      manifest = {}
+    }
+  }
   let i = 0
   while i < array_length(mods) {
+    let mod_meta = manifest[mods[i]]
+    if mod_meta {
+      let j = 0
+      let missing = []
+      while j < array_length(mod_meta.dependencies){
+        if !array_contains(global.rmml.mod_list, mod_meta.dependencies[j]) {
+          array_push(missing, mod_meta.dependencies[j])
+        }
+        j += 1
+      }
+      if array_length(missing) > 0 {
+        global.rmml.warn(["Mod not loaded because of missing dependency", mods[i], missing])
+        i += 1
+        continue
+      }
+    }
     global.rmml.__load_file(mods[i])
     i += 1
   }
