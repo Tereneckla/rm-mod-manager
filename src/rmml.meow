@@ -585,7 +585,7 @@ global.rmml.__add_controllers = fun () {
 }
 
 -- parse json
-global.rmml.parse_json_file = fun (filename) {
+global.parse_json_file = fun (filename) {
   return global.rmml.try_catch(fun (filename) {
     b = buffer_load(filename)
     s = buffer_read(b, buffer_string)
@@ -663,7 +663,7 @@ global.rmml.__boot = fun() {
   -- load dependencies
   let dependencies = {}
   if file_exists("mods/dependencies.json") {
-    dependencies = global.rmml.parse_json_file("mods/dependencies.json")
+    dependencies = global.parse_json_file("mods/dependencies.json")
     if !is_struct(dependencies) {
       dependencies = {}
     }

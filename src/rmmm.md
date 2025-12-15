@@ -271,7 +271,7 @@ self.cache_local = fun () {
   -- raw manifest
   let raw_manifest = {}
   if file_exists(self.manifest_file) {
-    raw_manifest = global.rmml.parse_json_file(self.manifest_file)
+    raw_manifest = global.parse_json_file(self.manifest_file)
     if !is_struct(raw_manifest) {
       global.rmml.warnings += "| Parsing error with local manifest, resetting"
       file_delete(self.manifest_file)
@@ -698,7 +698,7 @@ if self.state == 0 {
       let f = self.directory("foreign_manifest.json")
       if file_exists(f) {
         self.downloading_manifest = false
-        self.foreign_manifest = global.rmml.parse_json_file(f)
+        self.foreign_manifest = global.parse_json_file(f)
         if !is_struct(self.foreign_manifest) {
           global.rmml.throw("There was an error parsing\nthe foreign manifest\nPlease contact Harlem512 or try again later")
         }
