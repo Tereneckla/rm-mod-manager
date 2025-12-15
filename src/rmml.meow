@@ -585,13 +585,20 @@ global.rmml.__add_controllers = fun () {
 }
 
 -- parse json
-global.parse_json_file = fun (filename) {
+global.rmml.parse_json_file = fun (filename) {
   return global.rmml.try_catch(fun (filename) {
     b = buffer_load(filename)
     s = buffer_read(b, buffer_string)
     buffer_delete(b)
     return json_parse(s)
   }, undefined, filename)
+}
+
+global.rmml.remove_mod_file_ending = fun (filename) {
+  filename = string_replace(filename, ".md", "")
+  filename = string_replace(filename, ".ini", "")
+  filename = string_replace(filename, ".meow", "")
+  return filename
 }
 
 -- MARK: Boot loader
@@ -653,25 +660,25 @@ global.rmml.__boot = fun() {
   -- load the mod list
   let mods = global.rmml.__compile_mod_list("mods/modlist.txt")
 
-  -- load local manifest to check dependencies
-  let manifest = {}
-  if file_exists("mods/rmmm/manifest.json") {
-    manifest = global.parse_json_file("mods/rmmm/manifest.json")
-    if !manifest {
-      manifest = {}
+  -- load dependencies
+  let dependencies = {}
+  if file_exists("mods/dependencies.json") {
+    dependencies = global.rmml.parse_json_file("mods/dependencies.json")
+    if !is_struct(dependencies) {
+      dependencies = {}
     }
   }
 
   -- load each mod on the list
   let i = 0
   while i < array_length(mods) {
-    let mod_meta = manifest[mods[i]]
-    if mod_meta {
+    let mod_dependencies = dependencies[mods[i]]
+    if array_length(mod_dependencies) > 0 {
       let j = 0
       let missing = []
-      while j < array_length(mod_meta.dependencies){
-        if !array_contains(global.rmml.mod_list, mod_meta.dependencies[j]) {
-          array_push(missing, mod_meta.dependencies[j])
+      while j < array_length(mod_dependencies){
+        if !array_contains(global.rmml.mod_list, global.rmml.remove_mod_file_ending(mod_dependencies[j])) {
+          array_push(missing, mod_dependencies[j])
         }
         j += 1
       }

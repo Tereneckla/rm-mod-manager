@@ -271,8 +271,8 @@ self.cache_local = fun () {
   -- raw manifest
   let raw_manifest = {}
   if file_exists(self.manifest_file) {
-    raw_manifest = global.parse_json_file(self.manifest_file)
-    if !raw_manifest {
+    raw_manifest = global.rmml.parse_json_file(self.manifest_file)
+    if !is_struct(raw_manifest) {
       global.rmml.warnings += "| Parsing error with local manifest, resetting"
       file_delete(self.manifest_file)
       raw_manifest = {}
@@ -402,6 +402,20 @@ self.save_manifest = fun () {
   let manifest = file_text_open_write(self.manifest_file)
   file_text_write_string(manifest, json_stringify(self.local_manifest))
   file_text_close(manifest)
+}
+
+self.save_dependencies = fun () {
+  let names = struct_get_names(self.local_manifest)
+  let dependencies = {}
+  let i = 0
+  while i < array_length(names) {
+    dependencies[names[i]] = self.local_manifest[names[i]].dependencies
+    i += 1
+  }
+
+  let dependencies_file = file_text_open_write("mods/dependencies.json")
+  file_text_write_string(dependencies_file, json_stringify(dependencies))
+  file_text_close(dependencies_file)
 }
 
 -- crash safety valve
@@ -584,6 +598,7 @@ if self.state == 0 {
       self.foreign_manifest[self.delete_name]._local = undefined
     }
     self.save_manifest()
+    self.save_dependencies()
     self.force_restart = true
   }
 
@@ -683,7 +698,7 @@ if self.state == 0 {
       let f = self.directory("foreign_manifest.json")
       if file_exists(f) {
         self.downloading_manifest = false
-        self.foreign_manifest = global.parse_json_file(f)
+        self.foreign_manifest = global.rmml.parse_json_file(f)
         if !is_struct(self.foreign_manifest) {
           global.rmml.throw("There was an error parsing\nthe foreign manifest\nPlease contact Harlem512 or try again later")
         }
@@ -897,6 +912,7 @@ if self.state == 0 {
             -- update local file
             if (self.downloading_mod == 0) {
               self.save_manifest()
+              self.save_dependencies()
             }
           }
 
