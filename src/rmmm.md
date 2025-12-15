@@ -114,7 +114,7 @@ self.download_mod = fun (name) {
   let mod_meta = self.foreign_manifest[name]
   if (!mod_meta) {
     global.rmml.warn("Tried to download nonexistent mod " + name)
-    return --error
+    return
   }
   -- already downloading or downloaded
   if (variable_struct_exists(mod_meta, "_downloading")) {
@@ -130,9 +130,8 @@ self.download_mod = fun (name) {
   let i = 0
   while (i < array_length(mod_meta.dependencies)) {
     -- don't download again
-    let dependency = mod_meta.dependencies[i]
-    if !(variable_struct_exists(self.local_manifest, dependency)) {
-      self.download_mod(dependency)
+    if !(variable_struct_exists(self.local_manifest, mod_meta.dependencies[i])) {
+      self.download_mod(mod_meta.dependencies[i])
     }
     i += 1
   }
@@ -243,7 +242,7 @@ self.sort_mods = fun(modlist) {
       if indegree[next] == 0 {
         -- all dependencies fulfilled, add to queue
         let j = 0
-        while j < array_length(modlist) {
+        while j < n {
           if modlist[j].manifest.name == next {
             array_push(queue, modlist[j])
             break
@@ -398,18 +397,16 @@ self.save_mods = fun () {
 
 
 self.save_manifest = fun () {
-  global.rmml.log("Saving manifest")
   let manifest = file_text_open_write(self.manifest_file)
   file_text_write_string(manifest, json_stringify(self.local_manifest))
   file_text_close(manifest)
 }
 
 self.save_dependencies = fun () {
-  let names = struct_get_names(self.local_manifest)
   let dependencies = {}
   let i = 0
-  while i < array_length(names) {
-    dependencies[names[i]] = self.local_manifest[names[i]].dependencies
+  while i < array_length(self.sorted_local_mods) {
+    dependencies[self.sorted_local_mods[i].manifest.name] = self.sorted_local_mods[i].manifest.dependencies
     i += 1
   }
 
