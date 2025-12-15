@@ -22,7 +22,7 @@ global.component = {
     draw_sprite_stretched_ext(sui_9slice, 0, x, y, w, h,
       if pin {c_ltgray} else {c_white}, 1)
     if text != undefined {
-      draw_text(x + 6, y + 6, text)
+      draw_text(x + 6, y + (if h >= 22 { 6 } else { 3 }), text)
     }
 
     -- tool tip in bottom left
@@ -191,61 +191,43 @@ self.get_missing_dependencies = fun() {
   return missing_dependencies
 }
 
-self.sort_mods = fun(modlist, enabled) {
+self.sort_mods = fun(modlist) {
   -- length 1 is sorted
-  if array_length(modlist) <= 1 {
-    return modlist
-  }
-
-  -- remove disabled mods from sorting
-  let enabled_mods = []
-  let disabled_mods = []
-  if enabled {
-    let i = 0
-    while i < array_length(modlist) {
-      if modlist[i].disabled {
-        array_push(disabled_mods, modlist[i])
-      } else {
-        array_push(enabled_mods, modlist[i])
-      }
-      i += 1
-    }
-  }
-  else {
-    enabled_mods = modlist
-  }
-
-  let n = array_length(enabled_mods)
-  -- only 1 enabled mod, dependencies sorted
+  let n = array_length(modlist)
   if n <= 1 {
     return modlist
   }
 
-  let name_to_num = {}
-  let indegree = array_create(n, 0)
+  let indegree = {}
   let queue = []
   let res = []
 
-  i = 0
+  let i = 0
   while i < n {
-    name_to_num[enabled_mods[i].manifest.name] = i
+    indegree[modlist[i].manifest.name] = 0
     i += 1
   }
 
   i = 0
   while i < n {
+    let mod_meta = modlist[i].manifest
     let j = 0
-    while j < array_length(enabled_mods[i].manifest.dependencies) {
-        indegree[name_to_num[enabled_mods[i].manifest.dependencies[j]]] +=1
+    while j < array_length(mod_meta.dependencies) {
+        if !variable_struct_exists(indegree, mod_meta.dependencies[j]) {
+          global.rmml.warn(["Missing dependency", mod_meta.name, mod_meta.dependencies[j]])
+          return modlist
+        }
+        indegree[mod_meta.dependencies[j]] +=1
         j += 1
     }
     i += 1
   }
 
+  -- add mods without dependencies to queue
   i = 0
   while i < n {
-    if (indegree[name_to_num[enabled_mods[i].manifest.name]] == 0) {
-      array_push(queue,enabled_mods[i])
+    if (indegree[modlist[i].manifest.name] == 0) {
+      array_push(queue, modlist[i])
     }
     i += 1
   }
@@ -256,23 +238,24 @@ self.sort_mods = fun(modlist, enabled) {
     array_insert(res, 0, top)
     i = 0
     while i < array_length(top.manifest.dependencies) {
-      let next = name_to_num[top.manifest.dependencies[i]]
+      let next = top.manifest.dependencies[i]
       indegree[next] -= 1
       if indegree[next] == 0 {
-        array_push(queue, enabled_mods[next])
+        -- all dependencies fulfilled, add to queue
+        let j = 0
+        while j < array_length(modlist) {
+          if modlist[j].manifest.name == next {
+            array_push(queue, modlist[j])
+            break
+          }
+          j += 1
+        }
       }
       i += 1
     }
   }
 
-  -- add disabled mods to the back
-  let i = 0
-  while i < array_length(disabled_mods) {
-    array_push(enabled_mods, disabled_mods[i])
-    i += 1
-  }
-
-  if array_length(res) != array_length(modlist) {
+  if array_length(res) != n {
     global.rmml.warn("Circular dependency detected")
     return modlist
   }
@@ -390,7 +373,7 @@ self.cache_local = fun () {
     i += 1
   }
   i = 0
-  new_mods = self.sort_mods(new_mods, false)
+  new_mods = self.sort_mods(new_mods)
   while i < array_length(new_mods) {
     array_push(self.sorted_local_mods, new_mods[i])
     i += 1
@@ -749,28 +732,28 @@ if self.state == 0 {
 
     -- scroll up
     if global.component.button(
-      20, 30, 400, 17,
+      20, 30, 320, 17,
       undefined,
       "Scroll Up"
     ) or mouse_wheel_up() {
       self.scroll = max(0, self.scroll - 1)
     }
     let i = 0
-    while i < 6 {
+    while i < 4 {
       draw_sprite_ext(sui_arrow_white_alt,0, 63 + i * 78,39, 1,1, 180, c_black,1)
       i += 1
     }
 
     -- scroll down
     if global.component.button(
-      20, 203, 400, 17,
+      20, 203, 320, 17,
       undefined,
       "Scroll Down"
     ) or mouse_wheel_down() {
       self.scroll = min(max(len - 7, 0), self.scroll + 1)
     }
     i = 0
-    while i < 6 {
+    while i < 4 {
       draw_sprite_ext(sui_arrow_white_alt,0, 63 + i * 78,211, 1,1, 0, c_black,1)
       i += 1
     }
@@ -780,6 +763,33 @@ if self.state == 0 {
     let top = self.scroll / len
     let bot = min(1, 7 / len)
     draw_sprite_stretched_ext(sui_9slice, 0, 6, 30 + top * 190, 10, bot * 190, c_gray, 1)
+
+    -- sort if in INSTALLED MODS
+    if self.state == 1 {
+      if global.component.button(
+        390, 30, 40, 17, 
+        "Sort",
+        "Sort by dependencies",
+      ) {
+        let enabled_mods = []
+        let disabled_mods = []
+        let i = 0
+        while i < array_length(self.sorted_local_mods) {
+          if self.sorted_local_mods[i].disabled {
+            array_push(disabled_mods, self.sorted_local_mods[i])
+          } else {
+            array_push(enabled_mods, self.sorted_local_mods[i])
+          }
+          i += 1
+        }
+        self.sorted_local_mods = self.sort_mods(enabled_mods)
+        i = 0
+        while i < array_length(disabled_mods) {
+          array_push(self.sorted_local_mods, disabled_mods[i])
+          i += 1
+        }
+      }
+    }
 
     -- the table
     let index = self.scroll
