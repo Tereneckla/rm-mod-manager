@@ -143,11 +143,11 @@ if __name__ == "__main__":
     
     with open("src/rmmm.md") as f:
         raw = f.read()
-        rmmm_version = raw.splitlines()[4][22:].replace('.', '')
+        rmmm_version = raw.splitlines()[4][22:].replace('.', '-')
 
     with open("src/rmml.meow") as f:
         raw = f.read()
-        rmml_version = raw.splitlines()[15][11:-1].replace('.', '')
+        rmml_version = raw.splitlines()[15][11:-1].replace('.', '-')
         rmml_src = post_process(raw, purgeLogs=True)
 
     with open("build/rmml.meow", 'w') as f:

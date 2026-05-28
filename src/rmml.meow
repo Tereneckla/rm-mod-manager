@@ -13,7 +13,7 @@ global.rmml_map = {}
 -- MARK: DATA
 global.rmml = {
   -- internal version number
-  version: 6.2,
+  version: 6.3,
   -- enables developer features
   dev: false,
 
@@ -184,6 +184,7 @@ global.rmml.register = fun (object, event, mod, fn) {
       let cur = global.rmml_current_mod
       global.rmml_current_mod = mod
 
+      method_get_self(fn).callTime = infinity
       if global.rmml.dev {
         fn()
       } else {
@@ -457,7 +458,8 @@ global.rmml.__load_csv_path = fun (path, mod_name) {
     let name = mod_name
     if use_modname {
       let get = ds_grid_get(grid, 3, y)
-      if get != undefined and get != 0 {
+      global.rmml.log(["CSV load submod", get, mod_name])
+      if get != undefined and get != 0 and get != "" {
         name = get
       }
     }
