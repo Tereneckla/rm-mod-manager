@@ -58,7 +58,7 @@ global.component = {
 if global.rmml.dev {
   self.manifest_url = "https://raw.githubusercontent.com/Harlem512/rm-mod-database/refs/heads/qa/dev_manifest.json"
 } else {
-  self.manifest_url = "https://raw.githubusercontent.com/Tereneckla/rm-mod-database/refs/heads/dependency/manifest.json"
+  self.manifest_url = "https://raw.githubusercontent.com/Harlem512/rm-mod-database/refs/heads/main/manifest.json"
 }
 
 self.manifest_file = "mods/rmmm/manifest.json"
